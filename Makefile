@@ -8,13 +8,14 @@ PLATFORM ?= linux/amd64,linux/arm64
 
 TAG ?= $(VERSION)-$(SUFFIX)
 BUILD_DATETIME = $(shell date -u +"%FT%T")
+REV_ID := $(shell git describe --match=none --always --abbrev=8 --dirty)
 
 IMAGE := $(REGISTRY)/$(REPOSITORY)/$(PROJECT):$(TAG)
 
 BUILD_ARGS = --build-arg BUILD_DATE=$(BUILD_DATETIME)
 BUILD_ARGS += --build-arg BUILD_VERSION=$(TAG)
 BUILD_ARGS += --build-arg ROUNDCUBEMAIL_VERSION=$(VERSION)
-BUILD_ARGS += --build-arg BUILD_REV_ID=1234
+BUILD_ARGS += --build-arg BUILD_REV_ID=$(REV_ID)
 
 build:
 	@echo "IMAGE: $(IMAGE)"
