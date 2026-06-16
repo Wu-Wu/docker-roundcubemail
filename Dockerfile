@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM ghcr.io/linuxserver/baseimage-alpine-nginx:3.23-1.28.3-r3_8.5.6-r0-ls30
+FROM ghcr.io/linuxserver/baseimage-alpine-nginx:3.21
 
 # set arguments
 ARG BUILD_DATE
@@ -24,42 +24,42 @@ RUN \
     aspell-en \
     aspell-ru \
     rsync \
-    php85-dom \
-    php85-intl \
-    php85-pdo_pgsql \
-    php85-pdo_mysql \
-    php85-pdo_sqlite \
-    php85-exif \
-    php85-ldap \
-    php85-gd \
-    php85-opcache \
-    php85-pecl-imagick \
-    php85-pecl-redis \
-    php85-zip \
-    php85-pspell && \
+    php83-dom \
+    php83-intl \
+    php83-pdo_pgsql \
+    php83-pdo_mysql \
+    php83-pdo_sqlite \
+    php83-exif \
+    php83-ldap \
+    php83-gd \
+    php83-opcache \
+    php83-pecl-imagick \
+    php83-pecl-redis \
+    php83-zip \
+    php83-pspell && \
   echo "**** configure php-fpm to pass env vars ****" && \
-  sed -E -i 's/^;?clear_env ?=.*$/clear_env = no/g' /etc/php85/php-fpm.d/www.conf && \
-  grep -qxF 'clear_env = no' /etc/php85/php-fpm.d/www.conf || echo 'clear_env = no' >> /etc/php85/php-fpm.d/www.conf && \
-  echo "env[PATH] = /usr/local/bin:/usr/bin:/bin" >> /etc/php85/php-fpm.conf && \
+  sed -E -i 's/^;?clear_env ?=.*$/clear_env = no/g' /etc/php83/php-fpm.d/www.conf && \
+  grep -qxF 'clear_env = no' /etc/php83/php-fpm.d/www.conf || echo 'clear_env = no' >> /etc/php83/php-fpm.d/www.conf && \
+  echo "env[PATH] = /usr/local/bin:/usr/bin:/bin" >> /etc/php83/php-fpm.conf && \
   echo "**** setup php session ****" && \
   { \
     echo "session.auto_start=Off"; \
     echo "session.gc_maxlifetime=21600"; \
     echo "session.gc_divisor=500"; \
     echo "session.gc_probability=1"; \
-  } > /etc/php85/conf.d/session-misc.ini; \
+  } > /etc/php83/conf.d/session-misc.ini; \
   echo "**** setup php limits ****" && \
   { \
     echo "memory_limit=${ROUNDCUBEMAIL_MEMORY_LIMIT}"; \
     echo "post_max_size=${ROUNDCUBEMAIL_POST_LIMIT}"; \
     echo "upload_max_filesize=${ROUNDCUBEMAIL_UPLOAD_LIMIT}"; \
-  } > /etc/php85/conf.d/roundcube-limits.ini && \
+  } > /etc/php83/conf.d/roundcube-limits.ini && \
   echo "**** setup php misc ****" && \
   { \
     echo "display_errors=Off"; \
     echo "log_errors=On"; \
     echo "zlib.output_compression=Off"; \
-  } > /etc/php85/conf.d/roundcube-misc.ini && \
+  } > /etc/php83/conf.d/roundcube-misc.ini && \
   echo "**** install roundcubemail ****" && \
   mkdir -p /app/www/src && \
   if [ -z ${ROUNDCUBEMAIL_VERSION+x} ]; then \
