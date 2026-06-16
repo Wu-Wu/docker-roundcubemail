@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM ghcr.io/linuxserver/baseimage-alpine-nginx:3.21
+FROM ghcr.io/linuxserver/baseimage-alpine-nginx:3.23-1.28.3-r3_8.5.6-r0-ls30
 
 # set arguments
 ARG BUILD_DATE
