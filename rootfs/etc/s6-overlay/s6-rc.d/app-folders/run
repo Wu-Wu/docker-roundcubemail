@@ -1,0 +1,15 @@
+#!/usr/bin/with-contenv bash
+# shellcheck shell=bash
+
+echo "*** create folders"
+
+# create dirs
+mkdir -p \
+    /app/www/public \
+    /config/roundcubemail \
+    /config/log/roundcubemail \
+    /data/enigma \
+    /data/plugins \
+    /data/skins \
+    /data/temp \
+    /data/db

@@ -1,0 +1,33 @@
+#!/usr/bin/with-contenv bash
+# shellcheck shell=bash
+
+source /app/helpers.sh
+
+# handling mail config
+if [[ -n "${ROUNDCUBEMAIL_IMAP_URL}" ]] || [[ -n "${ROUNDCUBEMAIL_SMTP_URL}" ]] || [[ -n "${ROUNDCUBEMAIL_SIEVE_URL}" ]]; then
+    ROUNDCUBEMAIL_IMAP_URL=${ROUNDCUBEMAIL_IMAP_URL:="tls://localhost:143"}
+    ROUNDCUBEMAIL_SMTP_URL=${ROUNDCUBEMAIL_SMTP_URL:="tls://localhost:587"}
+    ROUNDCUBEMAIL_SIEVE_URL=${ROUNDCUBEMAIL_SIEVE_URL:="tls://localhost:4190"}
+
+    # mail config exists?
+    if [[ ! -f /config/roundcubemail/mail.inc.php ]]; then
+        cat >/config/roundcubemail/mail.inc.php <<EOT
+<?php
+// See details in /app/www/public/config/defaults.inc.php
+// eg: tls://imap.foo.net:143 or ssl://imap.bar.com:993
+\$config['imap_host'] = '${ROUNDCUBEMAIL_IMAP_URL}';
+// eg: dovecot, cyrus, gimap, hmail, uw-imap
+\$config['imap_vendor'] = 'dovecot';
+// eg: tls://smtp.foo.net:587 or ssl://smtp.bar.com:465
+\$config['smtp_host'] = '${ROUNDCUBEMAIL_SMTP_URL}';
+\$config['smtp_user'] = '%u';
+\$config['smtp_pass'] = '%p';
+// eg: tls://mail.foo.net:4190
+\$config['managesieve_host'] = '${ROUNDCUBEMAIL_SIEVE_URL}';
+\$config['managesieve_auth_type'] = 'PLAIN';
+EOT
+    else
+        echo "*** mail config exists. SKIPPED"
+    fi
+    ensure_included "mail"
+fi

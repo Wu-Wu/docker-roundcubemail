@@ -1,0 +1,26 @@
+services:
+  roundcube:
+    image: docker.reg.ru/a.gerasimov/docker-roundcubemail/master:1.6.9-re0
+    container_name: roundcube
+    hostname: roundcube
+    env_file:
+      - ./roundcube.env
+    volumes:
+      - ./x/config:/config
+      - ./x/data:/data
+    ports:
+      - "127.0.0.1:8081:80"
+    networks:
+      - rc-private
+      - srs-private
+    restart: unless-stopped
+
+networks:
+  rc-private:
+    ipam:
+      driver: default
+      config:
+        - subnet: "172.16.155.0/24"
+  srs-private:
+    name: srs-docker_srs
+    external: true

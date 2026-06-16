@@ -1,0 +1,11 @@
+#!/usr/bin/with-contenv bash
+# shellcheck shell=bash
+
+source /app/helpers.sh
+
+echo "*** fresh roundcubemail database"
+
+# Initialize/update database
+/app/www/public/bin/initdb.sh \
+    --dir=/app/www/public/SQL --update \
+    || echo "*** initialize/update database failed."

@@ -1,0 +1,13 @@
+{
+    "disabled": [
+        "enigma",
+        "database_attachments",
+        "redundant_attachments"
+    ],
+    "extra": [
+        "texxasrulez/persistent_login",
+        "texxasrulez/account_details",
+        "SS88UK/roundcube-easy-unsubscribe",
+        "alexandregz/twofactor_gauthenticator"
+    ]
+}

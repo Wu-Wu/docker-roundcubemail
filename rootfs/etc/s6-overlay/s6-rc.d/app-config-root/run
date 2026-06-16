@@ -1,0 +1,13 @@
+#!/usr/bin/with-contenv bash
+# shellcheck shell=bash
+
+# root config exists?
+if [[ ! -f /config/roundcubemail/config.inc.php ]]; then
+    cat >/config/roundcubemail/config.inc.php <<EOT
+<?php
+// Root configuration
+\$config['plugins'] = [];
+EOT
+else
+    echo "*** root config exists. SKIPPED"
+fi

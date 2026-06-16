@@ -1,0 +1,32 @@
+#!/usr/bin/with-contenv bash
+# shellcheck shell=bash
+
+source /app/helpers.sh
+
+# custom config exists?
+if [[ ! -f /config/roundcubemail/custom.inc.php ]]; then
+    cat >/config/roundcubemail/custom.inc.php <<EOT
+<?php
+// See details in /app/www/public/config/defaults.inc.php
+// Put additional directives here
+\$config['temp_dir'] = '/data/temp';
+\$config['skin'] = 'elastic';
+\$config['request_path'] = '/';
+\$config['enigma_pgp_homedir'] = '/data/enigma';
+// Spellchecker
+\$config['enable_spellcheck'] = true;
+\$config['spellcheck_engine'] = 'pspell';
+\$config['spellcheck_languages'] = [
+    'en' => 'English',
+    'ru' => 'Russian',
+];
+// 2FA (twofactor_gauthenticator)
+\$config['force_enrollment_users'] = true;
+// ZipDownload
+\$config['zipdownload_attachments'] = 1;
+EOT
+else
+    echo "*** custom config exists. SKIPPED"
+fi
+
+ensure_included "custom"

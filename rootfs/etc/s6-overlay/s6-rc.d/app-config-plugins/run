@@ -1,0 +1,47 @@
+#!/usr/bin/with-contenv bash
+# shellcheck shell=bash
+
+source /app/helpers.sh
+
+if [[ ! -f /config/roundcubemail/plugins.inc.php ]]; then
+    cat >/config/roundcubemail/plugins.inc.php <<EOT
+<?php
+// See details in /app/www/public/config/defaults.inc.php
+\$config['plugins_bundled'] = [
+EOT
+    code=""
+    for el in /data/plugins/*/composer.json; do
+        plugin=$(cat $el \
+                    | jq '.version // "0.0.0", .name | split("/")[-1]' \
+                    | sed 's/"//g')
+        name=$(echo $plugin | cut -d ' ' -f2)
+        version=$(echo $plugin | cut -d ' ' -f1)
+
+        # check if plugin should be disabled
+        if [ $(cat /app/plugins.json | jq ".disabled[] | select(. == \"${name}\")") ]; then
+            disabled="// "
+        else
+            disabled=""
+        fi
+
+        code="${code}    ${disabled}'${name}', // v${version}"$'\n'
+    done
+
+    code="${code}];"
+
+    echo "${code}" >>/config/roundcubemail/plugins.inc.php
+    cat >>/config/roundcubemail/plugins.inc.php <<EOT
+\$config['plugins'] = array_filter(
+    array_unique(
+        array_merge(
+            \$config['plugins'],
+            \$config['plugins_bundled'],
+        )
+    )
+);
+EOT
+else
+    echo "*** plugins config exists. SKIPPED"
+fi
+
+ensure_included "plugins"

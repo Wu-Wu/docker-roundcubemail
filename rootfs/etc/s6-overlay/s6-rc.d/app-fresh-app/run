@@ -1,0 +1,29 @@
+#!/usr/bin/with-contenv bash
+# shellcheck shell=bash
+
+source /app/helpers.sh
+
+if [[ ! -f /app/www/public/index.php ]]; then
+    # fresh install
+    echo "*** initializing roundcubemail (this can take a while) ..."
+    rsync -rlD --exclude-from=/app/setup.exclude /app/www/src/ /app/www/public/
+
+    for dir in plugins skins; do
+        if [ -z "$(ls -A /data/${dir} 2>/dev/null)" ]; then
+            rsync -rlD --include "/${dir}" --exclude '/*' /app/www/src/ /data/
+        fi
+
+        if [ "$(readlink /app/www/public/${dir})" != "/data/${dir}" ]; then
+            rm -rf "/app/www/public/${dir}"
+            ln -s "/data/${dir}" "/app/www/public/${dir}"
+        fi
+    done
+
+    # logs
+    rsync -rlD /app/www/src/logs/ /config/log/roundcubemail/
+
+    echo "*** roundcubemail initialized"
+else
+    # TODO: update
+    echo "*** roundcubemail initialized. SKIPPED"
+fi

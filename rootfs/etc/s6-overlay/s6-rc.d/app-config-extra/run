@@ -1,0 +1,90 @@
+#!/usr/bin/with-contenv bash
+# shellcheck shell=bash
+
+source /app/helpers.sh
+
+mkdir -p /data/x
+rm -rf /data/x/*
+
+if [[ ! -f /config/roundcubemail/extra.inc.php ]]; then
+    cat >/config/roundcubemail/extra.inc.php <<EOT
+<?php
+// Extra plugins
+\$config['plugins_extra'] = [
+EOT
+    code=""
+    for repo in $(cat /app/plugins.json | jq '.extra[]'); do
+        clean=$(echo $repo | sed 's/"//g')
+        name=$(echo $clean | cut -d '/' -f2)
+
+        link="https://github.com/${clean}/archive/master.tar.gz"
+        tarball="/data/x/${name}.tar.gz"
+        
+        echo "** installing plugin: ${clean} ..."
+        curl -sL -o $tarball $link
+        
+        if [[ ! -f "${tarball}" ]]; then
+            fail "no-tarball"
+            continue
+        fi
+
+        mkdir "/data/x/${name}"
+
+        tar --strip-components=1 -xf $tarball \
+            -C "/data/x/${name}/"
+
+        if [[ ! $(ls -A "/data/x/${name}/") ]]; then
+            fail "no-content"
+            continue
+        fi
+
+        if [[ ! -f "/data/x/${name}/composer.json" ]]; then
+            fail "no-metadata"
+            continue
+        fi
+
+        # plugin meta
+        meta=$(cat "/data/x/${name}/composer.json" \
+                | jq '.version // "0.0.0", .name | split("/")[-1]' \
+                | sed 's/"//g')
+
+        origin=$(echo $meta | cut -d ' ' -f2)
+        version=$(echo $meta | cut -d ' ' -f1)
+
+        if [ "${origin}" != "${name}" ]; then
+            mv "/data/x/${name}" "/data/x/${origin}"
+            name="${origin}"
+        fi
+
+        rsync -rlD --include "/${name}" --exclude "/*" /data/x/ /data/plugins/
+
+        if [[ ! $(ls -A "/data/plugins/${name}/") ]]; then
+            fail "not-synced"
+            continue
+        fi
+
+        lsiown -R abc:abc "/data/plugins/${name}"
+        code="${code}    '${name}', // v${version}"$'\n'
+    done
+
+    code="${code}];"
+    echo "${code}" >>/config/roundcubemail/extra.inc.php
+
+    cat >>/config/roundcubemail/extra.inc.php <<EOT
+\$config['plugins'] = array_filter(
+    array_unique(
+        array_merge(
+            \$config['plugins'],
+            \$config['plugins_extra'],
+        )
+    )
+);
+EOT
+else
+    echo "*** extra-plugins config exists. SKIPPED"
+fi
+
+ensure_included "extra"
+
+# cleanup
+rm -rf /data/x

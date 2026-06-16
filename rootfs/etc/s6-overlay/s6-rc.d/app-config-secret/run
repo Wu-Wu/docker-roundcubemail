@@ -1,0 +1,17 @@
+#!/usr/bin/with-contenv bash
+# shellcheck shell=bash
+
+source /app/helpers.sh
+
+# secret config exists?
+if [[ ! -f /config/roundcubemail/secret.inc.php ]]; then
+    cat >/config/roundcubemail/secret.inc.php <<EOT
+<?php
+// See details in /app/www/public/config/defaults.inc.php
+\$config['des_key'] = '$(head /dev/urandom | base64 | head -c 24)';
+EOT
+else
+    echo "*** secret config exists. SKIPPED"
+fi
+
+ensure_included "secret"

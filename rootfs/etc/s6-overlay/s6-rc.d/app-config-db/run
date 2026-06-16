@@ -1,0 +1,27 @@
+#!/usr/bin/with-contenv bash
+# shellcheck shell=bash
+
+source /app/helpers.sh
+
+SQLITE_DB_PATH="/data/db/roundcubemail.db"
+
+# handling database config
+ROUNDCUBEMAIL_DB_URL=${ROUNDCUBEMAIL_DB_URL:="sqlite"}
+if [[ -n "${ROUNDCUBEMAIL_DB_URL}" ]]; then
+    echo $ROUNDCUBEMAIL_DB_URL | grep -qF "sqlite"
+    if [ $? -eq 0 ]; then
+        ROUNDCUBEMAIL_DB_URL="sqlite:///${SQLITE_DB_PATH}?mode=0646"
+    fi
+    # database config exists?
+    if [[ ! -f /config/roundcubemail/db.inc.php ]]; then
+        cat >/config/roundcubemail/db.inc.php <<EOT
+<?php
+// See details in /app/www/public/config/defaults.inc.php
+\$config['db_dsnw'] = '${ROUNDCUBEMAIL_DB_URL}';
+\$config['db_dsnr'] = '';
+EOT
+    else
+        echo "*** db config exists. SKIPPED"
+    fi
+    ensure_included "db"
+fi

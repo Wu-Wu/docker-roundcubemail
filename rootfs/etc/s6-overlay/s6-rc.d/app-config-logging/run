@@ -1,0 +1,23 @@
+#!/usr/bin/with-contenv bash
+# shellcheck shell=bash
+
+source /app/helpers.sh
+
+# logging config exists?
+if [[ ! -f /config/roundcubemail/logging.inc.php ]]; then
+    cat >/config/roundcubemail/logging.inc.php <<EOT
+<?php
+// See details in /app/www/public/config/defaults.inc.php
+\$config['log_driver'] = 'file';
+\$config['log_dir'] = '/config/log/roundcubemail';
+\$config['smtp_log'] = true;
+\$config['log_logins'] = true;
+\$config['imap_debug'] = true;
+\$config['smtp_debug'] = true;
+\$config['managesieve_debug'] = true;
+EOT
+else
+    echo "*** logging config exists. SKIPPED"
+fi
+
+ensure_included "logging"
