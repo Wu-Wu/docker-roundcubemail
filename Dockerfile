@@ -116,13 +116,14 @@ VOLUME /data
 
 LABEL \
   org.opencontainers.image.title="docker-roundcubemail" \
-  org.opencontainers.image.description="Roundcube Webmail" \
+  org.opencontainers.image.description="[Roundcube Webmail](https://roundcube.net) is a browser-based multilingual IMAP client with an application-like user interface." \
   org.opencontainers.image.authors="Wu-Wu" \
   org.opencontainers.image.created="${BUILD_DATE}" \
   org.opencontainers.image.version="${BUILD_VERSION}"\
   org.opencontainers.image.ref.name="${BUILD_REV_ID}" \
   org.opencontainers.image.revision="${BUILD_REV_ID}" \
+  org.opencontainers.image.licenses="GPL-3.0-only" \
   org.opencontainers.image.url="" \
-  org.opencontainers.image.source="" \
+  org.opencontainers.image.source="https://github.com/Wu-Wu/docker-roundcubemail" \
   org.opencontainers.image.documentation="" \
-  org.opencontainers.image.vendor=""
+  org.opencontainers.image.vendor="Wu-Wu"
