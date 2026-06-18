@@ -5,8 +5,8 @@ FROM ghcr.io/linuxserver/baseimage-alpine-nginx:3.21
 # set arguments
 ARG BUILD_DATE
 ARG BUILD_VERSION
-ARG BUILD_REV_ID
-ARG ROUNDCUBEMAIL_VERSION
+ARG BUILD_REVISION
+ARG APP_VERSION
 
 ARG ROUNDCUBEMAIL_RELEASE_KEYID="F3E4C04BB3DB5D4215C45F7F5AB2BAA141C4F7D5"
 ARG ROUNDCUBEMAIL_MEMORY_LIMIT="128M"
@@ -62,18 +62,18 @@ RUN \
   } > /etc/php83/conf.d/roundcube-misc.ini && \
   echo "**** install roundcubemail ****" && \
   mkdir -p /app/www/src && \
-  if [ -z ${ROUNDCUBEMAIL_VERSION+x} ]; then \
-    ROUNDCUBEMAIL_VERSION=$(curl -sL "https://api.github.com/repos/${SOURCE_REPO}/releases" \
+  if [ -z ${APP_VERSION+x} ]; then \
+    APP_VERSION=$(curl -sL "https://api.github.com/repos/${SOURCE_REPO}/releases" \
     | jq -r '.[] | select(.prerelease != true) | .tag_name' \
     | sort -rV | head -1); \
   fi && \
-  echo "**** download roundcubemail v${ROUNDCUBEMAIL_VERSION} ****" && \
+  echo "**** download roundcubemail v${APP_VERSION} ****" && \
   curl -s -o \
     /tmp/roundcubemail.tar.gz -L \
-    "https://github.com/${SOURCE_REPO}/releases/download/${ROUNDCUBEMAIL_VERSION}/roundcubemail-${ROUNDCUBEMAIL_VERSION}-complete.tar.gz" && \
+    "https://github.com/${SOURCE_REPO}/releases/download/${APP_VERSION}/roundcubemail-${APP_VERSION}-complete.tar.gz" && \
   curl -s -o \
     /tmp/roundcubemail.tar.gz.asc -L \
-    "https://github.com/${SOURCE_REPO}/releases/download/${ROUNDCUBEMAIL_VERSION}/roundcubemail-${ROUNDCUBEMAIL_VERSION}-complete.tar.gz.asc" && \
+    "https://github.com/${SOURCE_REPO}/releases/download/${APP_VERSION}/roundcubemail-${APP_VERSION}-complete.tar.gz.asc" && \
   export GNUPGHOME="$(mktemp -d)" && \
   gpg --batch -q --keyserver keyserver.ubuntu.com --recv-keys "${ROUNDCUBEMAIL_RELEASE_KEYID}" \
     || gpg --batch -q --keyserver pgp.mit.edu --recv-keys "${ROUNDCUBEMAIL_RELEASE_KEYID}" \
@@ -91,7 +91,7 @@ RUN \
     echo "<?php"; \
     echo ""; \
     echo "/*"; \
-    echo "   Roundcube Mail v${ROUNDCUBEMAIL_VERSION}"; \
+    echo "   Roundcube Mail v${APP_VERSION}"; \
     echo "   Build-version: ${BUILD_VERSION}"; \
     echo "   Build-date: ${BUILD_DATE}"; \
     echo "*/"; \
@@ -120,10 +120,10 @@ LABEL \
   org.opencontainers.image.authors="Wu-Wu" \
   org.opencontainers.image.created="${BUILD_DATE}" \
   org.opencontainers.image.version="${BUILD_VERSION}"\
-  org.opencontainers.image.ref.name="${BUILD_REV_ID}" \
-  org.opencontainers.image.revision="${BUILD_REV_ID}" \
+  org.opencontainers.image.ref.name="${BUILD_REVISION}" \
+  org.opencontainers.image.revision="${BUILD_REVISION}" \
   org.opencontainers.image.licenses="GPL-3.0-only" \
   org.opencontainers.image.url="" \
   org.opencontainers.image.source="https://github.com/Wu-Wu/docker-roundcubemail" \
-  org.opencontainers.image.documentation="" \
+  org.opencontainers.image.documentation="https://github.com/roundcube/roundcubemail/wiki" \
   org.opencontainers.image.vendor="Wu-Wu"
