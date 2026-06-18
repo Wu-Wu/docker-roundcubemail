@@ -66,21 +66,19 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    - name: Expose Build Args
-      id: expose-args
+    - name: Compose Build Args
+      id: compose-args
       run: |
-        TAG=${{ needs.check-new-tags.outputs.new_tag }}
-        re_version=$(echo "${TAG}" | cut -d'-' -f1)
+        build_version=${{ needs.check-new-tags.outputs.new_tag }}
+        app_version=$(echo "${build_version}" | cut -d'-' -f1)
         revision=$(git describe --match=none --always --abbrev=8 --dirty)
         build_date=$(date -u +"%FT%T")
-        echo "build_version=$TAG" >> $GITHUB_ENV
-        echo "build_date=$build_date" >> $GITHUB_ENV
-        echo "re_version=$re_version" >> $GITHUB_ENV
-        echo "revision=$revision" >> $GITHUB_ENV
-        echo "build_version=$TAG" >> $GITHUB_OUTPUT
-        echo "build_date=$build_date" >> $GITHUB_OUTPUT
-        echo "re_version=$re_version" >> $GITHUB_OUTPUT
-        echo "revision=$revision" >> $GITHUB_OUTPUT
+        cat >> $GITHUB_OUTPUT <<EOF
+        build_version=$build_version
+        build_date=$build_date
+        revision=$revision
+        app_version=$app_version
+        EOF
         cat $GITHUB_OUTPUT
 
     - name: Set up QEMU
@@ -106,10 +104,10 @@ jobs:
           push: true
           file: Dockerfile
           build-args: |
-            BUILD_VERSION=${{ steps.expose-args.outputs.build_version }}
-            BUILD_DATE=${{ steps.expose-args.outputs.build_date }}
-            ROUNDCUBEMAIL_VERSION=${{ steps.expose-args.outputs.re_version }}
-            BUILD_REV_ID=${{ steps.expose-args.outputs.revision }}
+            BUILD_VERSION=${{ steps.compose-args.outputs.build_version }}
+            BUILD_DATE=${{ steps.compose-args.outputs.build_date }}
+            APP_VERSION=${{ steps.compose-args.outputs.app_version }}
+            BUILD_REVISION=${{ steps.compose-args.outputs.revision }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           tags: |
