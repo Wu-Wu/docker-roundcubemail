@@ -1,0 +1,160 @@
+name: Check for New Tags and Build Docker Image
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  check-new-tags:
+    runs-on: ubuntu-latest
+    outputs:
+      new_tag: ${{ steps.compare-tags.outputs.new_tag }}
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Fetch Tags from Source Repository
+      run: |
+        git ls-remote --tags https://github.com/Wu-Wu/docker-roundcubemail.git | grep -v '\^{}' | awk '{print $2}' | sed 's#refs/tags/##' | sort -V > tags.txt
+      shell: bash
+
+    - name: Compare Tags
+      id: compare-tags
+      run: |
+        if [ -f .github/tags.txt ]; then
+          new_tag=$(comm -13 .github/tags.txt tags.txt | tail -n 1)
+          echo "$new_tag" > new_tag.txt
+        else
+          tail -n 1 tags.txt > new_tag.txt
+        fi
+        new_tag=$(cat new_tag.txt)
+        echo "new_tag=$new_tag" >> $GITHUB_ENV
+        echo "new_tag=$new_tag" >> $GITHUB_OUTPUT
+        cat $GITHUB_OUTPUT
+
+    - name: Store Current Tags
+      run: |
+        cp tags.txt .github/tags.txt
+      shell: bash
+
+    - name: Commit Updated Tags File
+      run: |
+        if ! git diff --quiet; then
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add .github/tags.txt
+          LAST_TAG=$(tail -n 1 .github/tags.txt)
+          git commit -m "Sync tags to ${LAST_TAG}"
+          git push
+        else
+          echo "No changes to commit"
+        fi
+      shell: bash
+
+  build-and-push-docker-image:
+    runs-on: ubuntu-latest
+    needs: check-new-tags
+    if: ${{ needs.check-new-tags.outputs.new_tag != '' }}
+    outputs:
+      image_tag: ${{ steps.expose.outputs.image_tag }}
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Expose Build Args
+      id: expose-args
+      run: |
+        TAG=${{ needs.check-new-tags.outputs.new_tag }}
+        re_version=$(echo "${TAG}" | cat -d'-' -f1)
+        revision=$(git describe --match=none --always --abbrev=8 --dirty)
+        build_date=$(date -u +"%FT%T")
+        echo "build_version=$TAG" >> $GITHUB_ENV
+        echo "build_date=$build_date" >> $GITHUB_ENV
+        echo "re_version=$re_version" >> $GITHUB_ENV
+        echo "revision=$revision" >> $GITHUB_ENV
+        echo "build_version=$TAG" >> $GITHUB_OUTPUT
+        echo "build_date=$build_date" >> $GITHUB_OUTPUT
+        echo "re_version=$re_version" >> $GITHUB_OUTPUT
+        echo "revision=$revision" >> $GITHUB_OUTPUT
+        cat $GITHUB_OUTPUT
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      with:
+        driver-opts: image=moby/buildkit:latest
+
+    - name: Log in to the Container registry
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Build and push image
+      uses: docker/build-push-action@v5
+      with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          file: Dockerfile
+          build-args: |
+            BUILD_VERSION=${{ steps.expose-args.outputs.build_version }}
+            BUILD_DATE=${{ steps.expose-args.outputs.build_date }}
+            ROUNDCUBEMAIL_VERSION=${{ steps.expose-args.outputs.re_version }}
+            BUILD_REV_ID=${{ steps.expose-args.outputs.revision }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          tags: |
+            ghcr.io/wu-wu/roundcubemail:${{ needs.check-new-tags.outputs.new_tag }}
+            ghcr.io/wu-wu/roundcubemail:latest
+
+    - name: Expose tag
+      id: expose
+      run: |
+        image_tag=${{ needs.check-new-tags.outputs.new_tag }}
+        echo "image_tag=$image_tag" >> $GITHUB_ENV
+        echo "image_tag=$image_tag" >> $GITHUB_OUTPUT
+        cat $GITHUB_OUTPUT
+
+  create-release:
+    runs-on: ubuntu-latest
+    needs: build-and-push-docker-image
+    if: ${{ needs.build-and-push-docker-image.outputs.image_tag != '' }}
+
+    steps:
+    - name: Check if Release Exists
+      id: check_release
+      run: |
+        release_url="https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ needs.build-and-push-docker-image.outputs.image_tag }}"
+        response=$(curl -s -o response.json -w "%{http_code}" \
+          -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+          $release_url)
+        echo "response_code=$response" >> $GITHUB_ENV
+        if [[ $response -eq 200 ]]; then
+          echo "release_exists=true" >> $GITHUB_ENV
+        else
+          echo "release_exists=false" >> $GITHUB_ENV
+        fi
+
+    - name: Create GitHub Release
+      if: env.release_exists == 'false'
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ needs.build-and-push-docker-image.outputs.image_tag }}
+        release_name: ${{ needs.build-and-push-docker-image.outputs.image_tag }}
+        body: |
+          Container images for this release:
+          - GitHub Container Registry: `ghcr.io/wu-wu/roundcubemail:${{ needs.build-and-push-docker-image.outputs.image_tag }}`
+        draft: false
+        prerelease: false
