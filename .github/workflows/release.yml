@@ -70,7 +70,7 @@ jobs:
       id: expose-args
       run: |
         TAG=${{ needs.check-new-tags.outputs.new_tag }}
-        re_version=$(echo "${TAG}" | cat -d'-' -f1)
+        re_version=$(echo "${TAG}" | cut -d'-' -f1)
         revision=$(git describe --match=none --always --abbrev=8 --dirty)
         build_date=$(date -u +"%FT%T")
         echo "build_version=$TAG" >> $GITHUB_ENV
