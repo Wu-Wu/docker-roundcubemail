@@ -1,6 +1,6 @@
 services:
   roundcube:
-    image: ghcr.io/wu-wu/roundcubemail:1.6.21-re1
+    image: ghcr.io/wu-wu/roundcubemail:1.6.21-re2
     container_name: roundcube
     hostname: roundcube
     env_file:
