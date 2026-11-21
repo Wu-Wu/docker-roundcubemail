@@ -3,8 +3,8 @@
         "enigma",
         "database_attachments",
         "redundant_attachments",
-        "texxasrulez/persistent_login",
-        "texxasrulez/account_details"
+        "persistent_login",
+        "account_details"
     ],
     "extra": [
         "SS88UK/roundcube-easy-unsubscribe",
