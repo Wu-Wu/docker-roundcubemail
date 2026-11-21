@@ -234,11 +234,17 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "$GITHUB_REF" == refs/tags/* ]]; then TAG="${GITHUB_REF_NAME}"; else TAG="sha-${GITHUB_SHA::12}"; fi
+          # manual dispatch = smoke-build: публикуем только sha-<12>,
+          # latest двигает исключительно релизный push-тег
+          latest_hub=(); latest_ghcr=()
+          if [[ "$GITHUB_EVENT_NAME" != "workflow_dispatch" ]]; then
+            latest_hub=(-t "$IMAGE:latest"); latest_ghcr=(-t "$IMAGE_GHCR:latest")
+          fi
           docker buildx imagetools create \
-            -t "$IMAGE:$TAG" -t "$IMAGE:latest" \
+            -t "$IMAGE:$TAG" "${latest_hub[@]}" \
             "$IMAGE:$TAG-amd64" "$IMAGE:$TAG-arm64"
           docker buildx imagetools create \
-            -t "$IMAGE_GHCR:$TAG" -t "$IMAGE_GHCR:latest" \
+            -t "$IMAGE_GHCR:$TAG" "${latest_ghcr[@]}" \
             "$IMAGE_GHCR:$TAG-amd64" "$IMAGE_GHCR:$TAG-arm64"
           # приватный адресат — отдельным best-effort шагом ниже
           {
@@ -257,8 +263,10 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "$GITHUB_REF" == refs/tags/* ]]; then TAG="${GITHUB_REF_NAME}"; else TAG="sha-${GITHUB_SHA::12}"; fi
+          latest=()
+          if [[ "$GITHUB_EVENT_NAME" != "workflow_dispatch" ]]; then latest=(-t "$IMAGE_CRXHUB:latest"); fi
           docker buildx imagetools create \
-            -t "$IMAGE_CRXHUB:$TAG" -t "$IMAGE_CRXHUB:latest" \
+            -t "$IMAGE_CRXHUB:$TAG" "${latest[@]}" \
             "$IMAGE_CRXHUB:$TAG-amd64" "$IMAGE_CRXHUB:$TAG-arm64"
         shell: bash
 
