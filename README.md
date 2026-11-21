@@ -89,6 +89,13 @@ branches (list: `rootfs/app/plugins.json`):
 `enigma`, `database_attachments`, `redundant_attachments`, `persistent_login`
 and `account_details` are disabled (the latter two upstream repos are archived).
 
+To refresh the extra plugins on a running container from their `master`
+branches (files only; the enabled list is not re-generated):
+
+```
+docker exec <container> bin/update_extra_plugins.sh
+```
+
 ## Building locally
 
 ```
