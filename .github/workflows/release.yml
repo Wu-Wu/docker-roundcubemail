@@ -10,7 +10,9 @@ name: Build and Release
 # Опционально (приватный registry за docker_auth): variables
 # CRXHUB_HOSTNAME/CRXHUB_USERNAME + secret CRXHUB_PASSWORD. Пуш в него —
 # третьим адресатом в build/publish, в Step Summary и release notes не
-# упоминается намеренно. CRXHUB_HOSTNAME пуст -> приватные шаги пропускаются.
+# упоминается намеренно. Это best-effort: сбой приватного реестра даёт
+# ::warning:: и не валит пайплайн (в отличие от публичных адресатов).
+# CRXHUB_HOSTNAME пуст -> приватные шаги пропускаются.
 # PR собирают без публикации; ежедневный schedule страхует теги, пропущенные
 # push-событием (needs_build=false, когда образ тега уже в ghcr).
 
@@ -125,6 +127,7 @@ jobs:
 
       - name: Login to private registry
         if: github.event_name != 'pull_request' && vars.CRXHUB_HOSTNAME != ''
+        continue-on-error: true   # best-effort: сбой приватного реестра не валит билд
         uses: docker/login-action@v4
         with:
           registry: ${{ vars.CRXHUB_HOSTNAME }}
@@ -193,7 +196,9 @@ jobs:
           docker push "$IMAGE_GHCR:$TAG-${{ matrix.arch }}"
           if [[ -n "$IMAGE_CRXHUB" ]]; then
             docker tag "$IMAGE_GHCR:$TAG-${{ matrix.arch }}" "$IMAGE_CRXHUB:$TAG-${{ matrix.arch }}"
-            docker push "$IMAGE_CRXHUB:$TAG-${{ matrix.arch }}"
+            if ! docker push "$IMAGE_CRXHUB:$TAG-${{ matrix.arch }}"; then
+              echo "::warning::private registry push failed for linux/${{ matrix.arch }}"
+            fi
           fi
 
   publish:
@@ -218,6 +223,7 @@ jobs:
 
       - name: Login to private registry
         if: vars.CRXHUB_HOSTNAME != ''
+        continue-on-error: true   # best-effort
         uses: docker/login-action@v4
         with:
           registry: ${{ vars.CRXHUB_HOSTNAME }}
@@ -234,12 +240,7 @@ jobs:
           docker buildx imagetools create \
             -t "$IMAGE_GHCR:$TAG" -t "$IMAGE_GHCR:latest" \
             "$IMAGE_GHCR:$TAG-amd64" "$IMAGE_GHCR:$TAG-arm64"
-          # приватный адресат: только публикация манифеста, без строк в summary
-          if [[ -n "$IMAGE_CRXHUB" ]]; then
-            docker buildx imagetools create \
-              -t "$IMAGE_CRXHUB:$TAG" -t "$IMAGE_CRXHUB:latest" \
-              "$IMAGE_CRXHUB:$TAG-amd64" "$IMAGE_CRXHUB:$TAG-arm64"
-          fi
+          # приватный адресат — отдельным best-effort шагом ниже
           {
             echo "## Итог"
             echo '```'
@@ -249,6 +250,17 @@ jobs:
             docker buildx imagetools inspect "$IMAGE_GHCR:$TAG"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish private registry manifest (best-effort)
+        if: vars.CRXHUB_HOSTNAME != ''
+        continue-on-error: true   # сбой приватного реестра не валит publish/release
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then TAG="${GITHUB_REF_NAME}"; else TAG="sha-${GITHUB_SHA::12}"; fi
+          docker buildx imagetools create \
+            -t "$IMAGE_CRXHUB:$TAG" -t "$IMAGE_CRXHUB:latest" \
+            "$IMAGE_CRXHUB:$TAG-amd64" "$IMAGE_CRXHUB:$TAG-arm64"
+        shell: bash
 
   release:
     needs: [check-new-tag, publish]
