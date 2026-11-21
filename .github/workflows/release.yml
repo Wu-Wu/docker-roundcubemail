@@ -77,9 +77,12 @@ jobs:
 
   build:
     needs: check-new-tag
-    # PRs always build (validation only, nothing is pushed)
+    # PRs always build (validation only, nothing is pushed); manual dispatch
+    # always builds and publishes the sha-tagged image (credentials smoke-test,
+    # rebuild of the current main) even when the latest tag is already out
     if: >-
       github.event_name == 'pull_request' ||
+      github.event_name == 'workflow_dispatch' ||
       needs.check-new-tag.outputs.needs_build == 'true'
     permissions:
       packages: write   # пуш промежуточных -amd64/-arm64 в ghcr под GITHUB_TOKEN
