@@ -1,5 +1,5 @@
-VERSION ?= 1.6.16
-SUFFIX ?= re6
+VERSION ?= 1.6.21
+SUFFIX ?= re1
 
 REGISTRY ?= cr.v.zyxmasta.net
 REPOSITORY ?= utils

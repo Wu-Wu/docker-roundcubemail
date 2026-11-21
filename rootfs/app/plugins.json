@@ -2,11 +2,11 @@
     "disabled": [
         "enigma",
         "database_attachments",
-        "redundant_attachments"
+        "redundant_attachments",
+        "persistent_login",
+        "account_details"
     ],
     "extra": [
-        "texxasrulez/persistent_login",
-        "texxasrulez/account_details",
         "SS88UK/roundcube-easy-unsubscribe",
         "alexandregz/twofactor_gauthenticator"
     ]
