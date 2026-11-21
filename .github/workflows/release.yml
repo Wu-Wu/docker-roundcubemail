@@ -3,8 +3,10 @@ name: Build and Release
 # Публикация: git tag <app>-re<N> -> сборка на нативных раннерах обеих арок ->
 # мультиарх-манифест <tag> и latest в docker.io/<DOCKERHUB_USER>/roundcubemail
 # и в ghcr.io/wu-wu/roundcubemail (пуш встроенным GITHUB_TOKEN, секреты не нужны).
-# Требуется заранее: secrets DOCKERHUB_USERNAME/DOCKERHUB_TOKEN, variable
-# DOCKERHUB_USER (namespace на hub.docker.com).
+# Требуется заранее: secret DOCKERHUB_TOKEN (read/write PAT) и variable
+# DOCKERHUB_USER (namespace на hub.docker.com). Логин держим именно
+# переменой: значение любого registered secret Actions вымарывает ***
+# во всех логах и step summary, включая имена образов в summary.
 # PR собирают без публикации; ежедневный schedule страхует теги, пропущенные
 # push-событием (needs_build=false, когда образ тега уже в ghcr).
 
@@ -104,7 +106,7 @@ jobs:
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v4
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          username: ${{ vars.DOCKERHUB_USER || 'wuwux' }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Login to ghcr.io
@@ -185,7 +187,7 @@ jobs:
       - name: Login to Docker Hub
         uses: docker/login-action@v4
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          username: ${{ vars.DOCKERHUB_USER || 'wuwux' }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Login to ghcr.io
