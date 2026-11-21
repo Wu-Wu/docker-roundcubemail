@@ -10,7 +10,7 @@ during the image build.
 ## Images
 
 - Registry: [`ghcr.io/wu-wu/roundcubemail`](https://github.com/Wu-Wu/docker-roundcubemail/pkgs/container/roundcubemail)
-- Tags: `<roundcube-version>-re<N>` (e.g. `1.6.16-re6`) plus `latest`
+- Tags: `<roundcube-version>-re<N>` (e.g. `1.6.21-re1`) plus `latest`
 - Architectures: `linux/amd64`, `linux/arm64`
 
 The `-re<N>` suffix is a revision of the image itself: bumping it rebuilds the
@@ -83,11 +83,11 @@ Bundled Roundcube plugins are loaded from `/data/plugins`. In addition, on
 first start the following plugins are downloaded from their GitHub `master`
 branches (list: `rootfs/app/plugins.json`):
 
-- `persistent_login`, `account_details` (texxasrulez)
 - `roundcube-easy-unsubscribe` (SS88UK)
 - `twofactor_gauthenticator` (alexandregz) — enrollment is forced
 
-`enigma`, `database_attachments` and `redundant_attachments` are disabled.
+`enigma`, `database_attachments`, `redundant_attachments`, `persistent_login`
+and `account_details` are disabled (the latter two upstream repos are archived).
 
 ## Building locally
 
@@ -96,12 +96,12 @@ make build REGISTRY=<your-registry> REPOSITORY=<repo>   # buildx multi-arch + pu
 ```
 
 A plain `docker build .` also works. Build args: `APP_VERSION` (Roundcube
-release to install, e.g. `1.6.16`; empty means "latest release"),
+release to install, e.g. `1.6.21`; empty means "latest release"),
 `BUILD_VERSION`, `BUILD_DATE`, `BUILD_REVISION`.
 
 ## CI/CD
 
-Pushing a version tag (e.g. `1.6.16-re7`) triggers the workflow: it builds the
+Pushing a version tag (e.g. `1.6.21-re2`) triggers the workflow: it builds the
 multi-arch image, pushes it to `ghcr.io` and creates the GitHub release. A
 daily schedule re-checks for tags that were missed, and pull requests build
 the image without publishing.
