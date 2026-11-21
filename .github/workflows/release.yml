@@ -8,10 +8,10 @@ name: Build and Release
 # переменой: значение любого registered secret Actions вымарывает ***
 # во всех логах и step summary, включая имена образов в summary.
 # Опционально (приватный registry за docker_auth): variables
-# CRXHUB_HOSTNAME/CRXHUB_USERNAME + secret CRXHUB_PASSWORD. Пуш в него —
-# третьим адресатом в build/publish, в Step Summary и release notes не
-# упоминается намеренно. Это best-effort: сбой приватного реестра даёт
-# ::warning:: и не валит пайплайн (в отличие от публичных адресатов).
+# CRXHUB_HOSTNAME/CRXHUB_USERNAME + secret CRXHUB_PASSWORD. В него publish
+# льёт только мультиарх-манифесты (<tag>/latest, исходники — ghcr arch-теги),
+# в Step Summary и release notes он не упоминается намеренно. Это best-effort:
+# сбой приватного реестра даёт ::warning::/красный шаг и не валит пайплайн.
 # CRXHUB_HOSTNAME пуст -> приватные шаги пропускаются.
 # PR собирают без публикации; ежедневный schedule страхует теги, пропущенные
 # push-событием (needs_build=false, когда образ тега уже в ghcr).
@@ -125,15 +125,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Login to private registry
-        if: github.event_name != 'pull_request' && vars.CRXHUB_HOSTNAME != ''
-        continue-on-error: true   # best-effort: сбой приватного реестра не валит билд
-        uses: docker/login-action@v4
-        with:
-          registry: ${{ vars.CRXHUB_HOSTNAME }}
-          username: ${{ vars.CRXHUB_USERNAME }}
-          password: ${{ secrets.CRXHUB_PASSWORD }}
-
       - name: Compose build args
         id: args
         run: |
@@ -194,12 +185,6 @@ jobs:
           TAG="${{ steps.args.outputs.tag }}"
           docker push "$IMAGE:$TAG-${{ matrix.arch }}"
           docker push "$IMAGE_GHCR:$TAG-${{ matrix.arch }}"
-          if [[ -n "$IMAGE_CRXHUB" ]]; then
-            docker tag "$IMAGE_GHCR:$TAG-${{ matrix.arch }}" "$IMAGE_CRXHUB:$TAG-${{ matrix.arch }}"
-            if ! docker push "$IMAGE_CRXHUB:$TAG-${{ matrix.arch }}"; then
-              echo "::warning::private registry push failed for linux/${{ matrix.arch }}"
-            fi
-          fi
 
   publish:
     needs: [check-new-tag, build]
@@ -263,11 +248,13 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "$GITHUB_REF" == refs/tags/* ]]; then TAG="${GITHUB_REF_NAME}"; else TAG="sha-${GITHUB_SHA::12}"; fi
+          # в crx уходят только мультиарх-манифесты; исходники — ghcr arch-теги,
+          # blobs копируются cross-registry, раздельных -amd64/-arm64 тегов в crx нет
           latest=()
           if [[ "$GITHUB_EVENT_NAME" != "workflow_dispatch" ]]; then latest=(-t "$IMAGE_CRXHUB:latest"); fi
           docker buildx imagetools create \
             -t "$IMAGE_CRXHUB:$TAG" "${latest[@]}" \
-            "$IMAGE_CRXHUB:$TAG-amd64" "$IMAGE_CRXHUB:$TAG-arm64"
+            "$IMAGE_GHCR:$TAG-amd64" "$IMAGE_GHCR:$TAG-arm64"
         shell: bash
 
   release:
