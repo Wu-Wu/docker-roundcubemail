@@ -8,17 +8,17 @@ ARG BUILD_VERSION
 ARG BUILD_REVISION
 ARG APP_VERSION
 
+# fingerprint of the signing key shipped at keys/roundcube-devs.asc;
+# the build imports that file only and asserts this fingerprint,
+# no network keyserver is contacted
 ARG ROUNDCUBEMAIL_RELEASE_KEYID="F3E4C04BB3DB5D4215C45F7F5AB2BAA141C4F7D5"
 ARG ROUNDCUBEMAIL_MEMORY_LIMIT="128M"
 ARG ROUNDCUBEMAIL_UPLOAD_LIMIT="10M"
 ARG ROUNDCUBEMAIL_POST_LIMIT="12M"
 ARG SOURCE_REPO="roundcube/roundcubemail"
 
+# layer 1: system packages and PHP extensions (stable across app version bumps)
 RUN \
-  apk add --no-cache --virtual=build-dependencies \
-    gpg \
-    gpg-agent \
-    gnupg-dirmngr && \
   apk add --no-cache \
     aspell \
     aspell-en \
@@ -36,7 +36,10 @@ RUN \
     php83-pecl-imagick \
     php83-pecl-redis \
     php83-zip \
-    php83-pspell && \
+    php83-pspell
+
+# layer 2: php-fpm env passthrough and runtime php tunables
+RUN \
   echo "**** configure php-fpm to pass env vars ****" && \
   sed -E -i 's/^;?clear_env ?=.*$/clear_env = no/g' /etc/php83/php-fpm.d/www.conf && \
   grep -qxF 'clear_env = no' /etc/php83/php-fpm.d/www.conf || echo 'clear_env = no' >> /etc/php83/php-fpm.d/www.conf && \
@@ -59,26 +62,34 @@ RUN \
     echo "display_errors=Off"; \
     echo "log_errors=On"; \
     echo "zlib.output_compression=Off"; \
-  } > /etc/php83/conf.d/roundcube-misc.ini && \
-  echo "**** install roundcubemail ****" && \
+  } > /etc/php83/conf.d/roundcube-misc.ini
+
+# layer 3: roundcube itself — the only layer that rebuilds on an app version bump
+COPY keys/roundcube-devs.asc /tmp/roundcube-devs.asc
+RUN \
+  apk add --no-cache --virtual=build-dependencies gpg gpg-agent && \
+  echo "**** assert pinned signing key fingerprint ****" && \
+  key_fpr=$(gpg --batch --with-colons --import-options show-only --import /tmp/roundcube-devs.asc \
+    | awk -F: '/^fpr:/ {print $10; exit}') && \
+  if [ "${key_fpr}" != "${ROUNDCUBEMAIL_RELEASE_KEYID}" ]; then \
+    echo "Signing key fingerprint mismatch: ${key_fpr}"; \
+    exit 1; \
+  fi && \
+  export GNUPGHOME="$(mktemp -d)" && \
+  gpg --batch -q --import /tmp/roundcube-devs.asc && \
   mkdir -p /app/www/src && \
   if [ -z ${APP_VERSION+x} ]; then \
-    APP_VERSION=$(curl -sL "https://api.github.com/repos/${SOURCE_REPO}/releases" \
-    | jq -r '.[] | select(.prerelease != true) | .tag_name' \
+    APP_VERSION=$(curl -fsSL "https://api.github.com/repos/${SOURCE_REPO}/releases" \
+    | jq -r '.[] | select(.prerelease != true and .draft != true) | .tag_name' \
     | sort -rV | head -1); \
   fi && \
   echo "**** download roundcubemail v${APP_VERSION} ****" && \
-  curl -s -o \
+  curl -fsSL --retry 3 --retry-connrefused -o \
     /tmp/roundcubemail.tar.gz -L \
     "https://github.com/${SOURCE_REPO}/releases/download/${APP_VERSION}/roundcubemail-${APP_VERSION}-complete.tar.gz" && \
-  curl -s -o \
+  curl -fsSL --retry 3 --retry-connrefused -o \
     /tmp/roundcubemail.tar.gz.asc -L \
     "https://github.com/${SOURCE_REPO}/releases/download/${APP_VERSION}/roundcubemail-${APP_VERSION}-complete.tar.gz.asc" && \
-  export GNUPGHOME="$(mktemp -d)" && \
-  gpg --batch -q --keyserver keyserver.ubuntu.com --recv-keys "${ROUNDCUBEMAIL_RELEASE_KEYID}" \
-    || gpg --batch -q --keyserver pgp.mit.edu --recv-keys "${ROUNDCUBEMAIL_RELEASE_KEYID}" \
-    || gpg --batch -q --keyserver keyserver.pgp.com --recv-keys "${ROUNDCUBEMAIL_RELEASE_KEYID}" \
-    || gpg --batch -q --keyserver keys.openpgp.org --recv-keys "${ROUNDCUBEMAIL_RELEASE_KEYID}" && \
   if ! gpg --batch -q --verify "/tmp/roundcubemail.tar.gz.asc" "/tmp/roundcubemail.tar.gz"; then \
     echo "File signature mismatch"; \
     exit 1; \
@@ -119,11 +130,11 @@ LABEL \
   org.opencontainers.image.description="[Roundcube Webmail](https://roundcube.net) is a browser-based multilingual IMAP client with an application-like user interface." \
   org.opencontainers.image.authors="Wu-Wu" \
   org.opencontainers.image.created="${BUILD_DATE}" \
-  org.opencontainers.image.version="${BUILD_VERSION}"\
+  org.opencontainers.image.version="${BUILD_VERSION}" \
   org.opencontainers.image.ref.name="${BUILD_REVISION}" \
   org.opencontainers.image.revision="${BUILD_REVISION}" \
   org.opencontainers.image.licenses="GPL-3.0-only" \
-  org.opencontainers.image.url="" \
+  org.opencontainers.image.url="https://hub.docker.com/r/wuwux/roundcubemail" \
   org.opencontainers.image.source="https://github.com/Wu-Wu/docker-roundcubemail" \
   org.opencontainers.image.documentation="https://github.com/roundcube/roundcubemail/wiki" \
   org.opencontainers.image.vendor="Wu-Wu"
