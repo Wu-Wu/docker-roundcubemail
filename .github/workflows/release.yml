@@ -1,10 +1,19 @@
 name: Build and Release
 
+# Публикация: git tag <app>-re<N> -> сборка на нативных раннерах обеих арок ->
+# мультиарх-манифест <tag> и latest в docker.io/<DOCKERHUB_USER>/roundcubemail
+# и в ghcr.io/wu-wu/roundcubemail (пуш встроенным GITHUB_TOKEN, секреты не нужны).
+# Требуется заранее: secrets DOCKERHUB_USERNAME/DOCKERHUB_TOKEN, variable
+# DOCKERHUB_USER (namespace на hub.docker.com).
+# PR собирают без публикации; ежедневный schedule страхует теги, пропущенные
+# push-событием (needs_build=false, когда образ тега уже в ghcr).
+
 on:
   push:
     tags:
       - "*"
   pull_request:
+    branches: ["main"]
   schedule:
     - cron: "0 6 * * *"
   workflow_dispatch:
@@ -12,8 +21,13 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
-  IMAGE: ghcr.io/wu-wu/roundcubemail
+  IMAGE: ${{ vars.DOCKERHUB_USER != '' && format('{0}/roundcubemail', vars.DOCKERHUB_USER) || 'wuwux/roundcubemail' }}
+  IMAGE_GHCR: ghcr.io/wu-wu/roundcubemail
 
 jobs:
   check-new-tag:
@@ -27,6 +41,7 @@ jobs:
         id: detect
         env:
           GH_TOKEN: ${{ github.token }}
+          IMAGE_GHCR: ${{ env.IMAGE_GHCR }}
         run: |
           set -euo pipefail
           tag=$(gh api "repos/${GITHUB_REPOSITORY}/tags?per_page=100" \
@@ -41,12 +56,12 @@ jobs:
           echo "Latest tag: ${tag} (roundcube ${app_version})"
           # anonymous pull credentials: a 404 manifest means "not built yet"
           ghcr_token=$(curl -fsSL \
-            "https://ghcr.io/token?service=ghcr.io&scope=repository:${IMAGE#ghcr.io/}:pull" \
+            "https://ghcr.io/token?service=ghcr.io&scope=repository:${IMAGE_GHCR#ghcr.io/}:pull" \
             | jq -r .token)
           code=$(curl -s -o /dev/null -w '%{http_code}' \
             -H "Authorization: Bearer ${ghcr_token}" \
             -H "Accept: application/vnd.oci.image.index.v1+json" \
-            "https://ghcr.io/v2/${IMAGE#ghcr.io/}/manifests/${tag}")
+            "https://ghcr.io/v2/${IMAGE_GHCR#ghcr.io/}/manifests/${tag}")
           if [ "${code}" = "200" ]; then
             echo "Image for ${tag} is already published."
             needs_build=false
@@ -66,70 +81,139 @@ jobs:
     if: >-
       github.event_name == 'pull_request' ||
       needs.check-new-tag.outputs.needs_build == 'true'
-    runs-on: ubuntu-latest
     permissions:
-      contents: read
-      packages: write
+      packages: write   # пуш промежуточных -amd64/-arm64 в ghcr под GITHUB_TOKEN
+    strategy:
+      fail-fast: false   # падение одной арки не отменяет вторую
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm   # нативный arm64, бесплатно для публичных репо
+    runs-on: ${{ matrix.runner }}
+    name: build (${{ matrix.arch }})   # стабильный context для required checks
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Compose build args
-        id: args
-        run: |
-          set -euo pipefail
-          if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
-            # never derive tags from GITHUB_REF_NAME: on PRs it is "N/merge",
-            # a slash is not valid in a docker tag
-            version="pr-${GITHUB_SHA:0:12}"
-            push=false
-          else
-            version="${{ needs.check-new-tag.outputs.tag }}"
-            push=true
-          fi
-          {
-            echo "version=${version}"
-            echo "push=${push}"
-            echo "revision=$(git describe --match=none --always --abbrev=8 --dirty)"
-            echo "build_date=$(date -u +%FT%T)"
-            echo "app_version=${{ needs.check-new-tag.outputs.app_version }}"
-          } >> "$GITHUB_OUTPUT"
-        shell: bash
+      - name: Login to Docker Hub
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Log in to the Container registry
-        if: steps.args.outputs.push == 'true'
+      - name: Login to ghcr.io
+        if: github.event_name != 'pull_request'
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push image
-        uses: docker/build-push-action@v7
+      - name: Compose build args
+        id: args
+        run: |
+          set -euo pipefail
+          # тег образа: push по тегу -> его имя; PR/dispatch -> sha-префикс
+          # (GITHUB_REF_NAME на PR это "N/merge", слэш недопустим в docker-теге)
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            tag="${GITHUB_REF_NAME}"
+            app_version="${GITHUB_REF_NAME%%-*}"
+          else
+            tag="sha-${GITHUB_SHA::12}"
+            app_version="${{ needs.check-new-tag.outputs.app_version }}"
+          fi
+          {
+            echo "tag=${tag}"
+            echo "app_version=${app_version}"
+            echo "revision=$(git describe --match=none --always --abbrev=8 --dirty)"
+            echo "build_date=$(date -u +%FT%T)"
+          } >> "$GITHUB_OUTPUT"
+        shell: bash
+
+      - name: Build (native ${{ matrix.arch }})
+        run: |
+          docker build --platform "linux/${{ matrix.arch }}" \
+            -t "$IMAGE:${{ steps.args.outputs.tag }}-${{ matrix.arch }}" \
+            -t "$IMAGE_GHCR:${{ steps.args.outputs.tag }}-${{ matrix.arch }}" \
+            --build-arg BUILD_VERSION=${{ steps.args.outputs.tag }} \
+            --build-arg BUILD_DATE=${{ steps.args.outputs.build_date }} \
+            --build-arg BUILD_REVISION=${{ steps.args.outputs.revision }} \
+            --build-arg APP_VERSION=${{ steps.args.outputs.app_version }} \
+            .
+
+      - name: Smoke test (native ${{ matrix.arch }})
+        run: |
+          # контракт потребителя: PHP-модули, которые Dockerfile обещает
+          # roundcube, на месте и загружаются; сам roundcube провалидирован;
+          # словарь aspell для ru виден pspell. Провал — до всякого пуша.
+          set -eu
+          IMG="$IMAGE_GHCR:${{ steps.args.outputs.tag }}-${{ matrix.arch }}"
+          docker run --rm --entrypoint /usr/bin/php83 "$IMG" -m \
+            | grep -qxF dom
+          docker run --rm --entrypoint /usr/bin/php83 "$IMG" -m \
+            | grep -qxF intl
+          docker run --rm --entrypoint /usr/bin/php83 "$IMG" -m \
+            | grep -qxF pspell
+          docker run --rm --entrypoint /usr/bin/php83 "$IMG" -m \
+            | grep -qxF imagick
+          docker run --rm --entrypoint /usr/bin/php83 "$IMG" -m \
+            | grep -qxF redis
+          docker run --rm --entrypoint /usr/bin/php83 "$IMG" -r \
+            'exit(is_file("/app/www/src/index.php") && is_dir("/app/www/src/program") ? 0 : 1);'
+          echo "smoke ok on ${{ matrix.arch }}"
+
+      - name: Push (native ${{ matrix.arch }})
+        if: github.event_name != 'pull_request'
+        run: |
+          TAG="${{ steps.args.outputs.tag }}"
+          docker push "$IMAGE:$TAG-${{ matrix.arch }}"
+          docker push "$IMAGE_GHCR:$TAG-${{ matrix.arch }}"
+
+  publish:
+    needs: [check-new-tag, build]
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    permissions:
+      packages: write
+    steps:
+      - name: Login to Docker Hub
+        uses: docker/login-action@v4
         with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          push: ${{ steps.args.outputs.push }}
-          file: Dockerfile
-          build-args: |
-            BUILD_VERSION=${{ steps.args.outputs.version }}
-            BUILD_DATE=${{ steps.args.outputs.build_date }}
-            BUILD_REVISION=${{ steps.args.outputs.revision }}
-            APP_VERSION=${{ steps.args.outputs.app_version }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          tags: |
-            ${{ env.IMAGE }}:${{ steps.args.outputs.version }}
-            ${{ steps.args.outputs.push == 'true' && format('{0}:latest', env.IMAGE) || '' }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Login to ghcr.io
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compose multi-arch manifest
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then TAG="${GITHUB_REF_NAME}"; else TAG="sha-${GITHUB_SHA::12}"; fi
+          docker buildx imagetools create \
+            -t "$IMAGE:$TAG" -t "$IMAGE:latest" \
+            "$IMAGE:$TAG-amd64" "$IMAGE:$TAG-arm64"
+          docker buildx imagetools create \
+            -t "$IMAGE_GHCR:$TAG" -t "$IMAGE_GHCR:latest" \
+            "$IMAGE_GHCR:$TAG-amd64" "$IMAGE_GHCR:$TAG-arm64"
+          {
+            echo "## Итог"
+            echo '```'
+            docker buildx imagetools inspect "$IMAGE:$TAG"
+            echo '```'
+            echo '```'
+            docker buildx imagetools inspect "$IMAGE_GHCR:$TAG"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   release:
-    needs: [check-new-tag, build]
+    needs: [check-new-tag, publish]
     if: >-
       github.event_name != 'pull_request' &&
       needs.check-new-tag.outputs.needs_build == 'true'
@@ -142,12 +226,33 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.check-new-tag.outputs.tag }}
           IMAGE: ${{ env.IMAGE }}
+          IMAGE_GHCR: ${{ env.IMAGE_GHCR }}
         run: |
           set -euo pipefail
-          if gh release view "${TAG}" >/dev/null 2>&1; then
-            echo "Release ${TAG} already exists."
-            exit 0
+          DH_DIGEST=$(docker buildx imagetools inspect "$IMAGE:$TAG" --format '{{json .Manifest.Digest}}')
+          GH_DIGEST=$(docker buildx imagetools inspect "$IMAGE_GHCR:$TAG" --format '{{json .Manifest.Digest}}')
+          if [ "$DH_DIGEST" = "$GH_DIGEST" ]; then
+            DIGEST_LINE="**digest:** \`${DH_DIGEST}\` (одинаков в обоих реестрах)"
+          else
+            DIGEST_LINE="**digest:** Docker Hub \`${DH_DIGEST}\`, GHCR \`${GH_DIGEST}\`"
           fi
-          notes="Container images for this release:"$'\n'"- \`${IMAGE}:${TAG}\`"
-          gh release create "${TAG}" --title "${TAG}" --notes "${notes}"
+          cat > notes.md <<EOF
+          Roundcube Webmail \`${TAG%%-*}\` (image revision \`${TAG}\`) — мультиарх amd64+arm64.
+
+          ## Где образ
+
+          ${DIGEST_LINE}
+
+          | реестр | образ |
+          |---|---|
+          | Docker Hub | \`docker.io/${IMAGE}:${TAG}\` · \`docker.io/${IMAGE}:latest\` |
+          | GHCR | \`${IMAGE_GHCR}:${TAG}\` · \`${IMAGE_GHCR}:latest\` |
+
+          Страницы: [hub.docker.com/r/${IMAGE}/tags](https://hub.docker.com/r/${IMAGE}/tags) · [ghcr.io/${IMAGE_GHCR#ghcr.io/}](https://ghcr.io/${IMAGE_GHCR#ghcr.io/})
+          EOF
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            gh release edit "${TAG}" --notes-file notes.md
+          else
+            gh release create "${TAG}" --title "${TAG}" --notes-file notes.md
+          fi
         shell: bash
