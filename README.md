@@ -10,7 +10,7 @@ during the image build.
 ## Images
 
 - Registry: [`ghcr.io/wu-wu/roundcubemail`](https://github.com/Wu-Wu/docker-roundcubemail/pkgs/container/roundcubemail)
-- Tags: `<roundcube-version>-re<N>` (e.g. `1.6.21-re1`) plus `latest`
+- Tags: `<roundcube-version>-re<N>` (e.g. `1.6.21-re2`) plus `latest`
 - Architectures: `linux/amd64`, `linux/arm64`
 
 The `-re<N>` suffix is a revision of the image itself: bumping it rebuilds the
