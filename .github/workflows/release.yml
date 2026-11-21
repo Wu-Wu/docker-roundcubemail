@@ -232,16 +232,19 @@ jobs:
           IMAGE_GHCR: ${{ env.IMAGE_GHCR }}
         run: |
           set -euo pipefail
+          # heredoc без кавычек: $-переменные нужны, но markdown-бэктики
+          # экранируем, иначе bash выполняет их как command substitution
           cat > notes.md <<EOF
-          Roundcube Webmail `${TAG%%-*}` (image revision `${TAG}`) — multi-arch amd64+arm64.
+          Roundcube Webmail \`${TAG%%-*}\` (image revision \`${TAG}\`) — multi-arch amd64+arm64.
 
           Container images for this release:
-          - Docker Hub: `docker.io/${IMAGE}:${TAG}` · `docker.io/${IMAGE}:latest`
-          - GitHub Container Registry: `${IMAGE_GHCR}:${TAG}` · `${IMAGE_GHCR}:latest`
+          - Docker Hub: \`docker.io/${IMAGE}:${TAG}\` · \`docker.io/${IMAGE}:latest\`
+          - GitHub Container Registry: \`${IMAGE_GHCR}:${TAG}\` · \`${IMAGE_GHCR}:latest\`
           EOF
-          if gh release view "${TAG}" >/dev/null 2>&1; then
-            gh release edit "${TAG}" --notes-file notes.md
+          # job без checkout: gh не определит репо из git, нужен явный -R
+          if gh release view "${TAG}" -R "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release edit "${TAG}" -R "${GITHUB_REPOSITORY}" --notes-file notes.md
           else
-            gh release create "${TAG}" --title "${TAG}" --notes-file notes.md
+            gh release create "${TAG}" -R "${GITHUB_REPOSITORY}" --title "${TAG}" --notes-file notes.md
           fi
         shell: bash
