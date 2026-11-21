@@ -229,26 +229,12 @@ jobs:
           IMAGE_GHCR: ${{ env.IMAGE_GHCR }}
         run: |
           set -euo pipefail
-          DH_DIGEST=$(docker buildx imagetools inspect "$IMAGE:$TAG" --format '{{json .Manifest.Digest}}')
-          GH_DIGEST=$(docker buildx imagetools inspect "$IMAGE_GHCR:$TAG" --format '{{json .Manifest.Digest}}')
-          if [ "$DH_DIGEST" = "$GH_DIGEST" ]; then
-            DIGEST_LINE="**digest:** \`${DH_DIGEST}\` (одинаков в обоих реестрах)"
-          else
-            DIGEST_LINE="**digest:** Docker Hub \`${DH_DIGEST}\`, GHCR \`${GH_DIGEST}\`"
-          fi
           cat > notes.md <<EOF
-          Roundcube Webmail \`${TAG%%-*}\` (image revision \`${TAG}\`) — мультиарх amd64+arm64.
+          Roundcube Webmail `${TAG%%-*}` (image revision `${TAG}`) — multi-arch amd64+arm64.
 
-          ## Где образ
-
-          ${DIGEST_LINE}
-
-          | реестр | образ |
-          |---|---|
-          | Docker Hub | \`docker.io/${IMAGE}:${TAG}\` · \`docker.io/${IMAGE}:latest\` |
-          | GHCR | \`${IMAGE_GHCR}:${TAG}\` · \`${IMAGE_GHCR}:latest\` |
-
-          Страницы: [hub.docker.com/r/${IMAGE}/tags](https://hub.docker.com/r/${IMAGE}/tags) · [ghcr.io/${IMAGE_GHCR#ghcr.io/}](https://ghcr.io/${IMAGE_GHCR#ghcr.io/})
+          Container images for this release:
+          - Docker Hub: `docker.io/${IMAGE}:${TAG}` · `docker.io/${IMAGE}:latest`
+          - GitHub Container Registry: `${IMAGE_GHCR}:${TAG}` · `${IMAGE_GHCR}:latest`
           EOF
           if gh release view "${TAG}" >/dev/null 2>&1; then
             gh release edit "${TAG}" --notes-file notes.md
